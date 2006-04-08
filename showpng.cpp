@@ -1,12 +1,14 @@
-#include <GLUT/glut.h>
+#include <GL/glut.h>
 #include "YImage.hpp"
 
 #include <iostream>
 #include <cstdlib>
 
-void keyboardFunc( unsigned char key, int x, int y ) ;
 void displayFunc( void ) ;
 void reshapeFunc( int width, int height ) ;
+
+void keyboardFunc( unsigned char key, int x, int y ) ;
+void menu( int id ) ;
 
 void cleanup( void ) ;
 
@@ -45,12 +47,22 @@ int main( int argc, char* argv[] )
     glutInitWindowSize( gImg->width(), gImg->height() ) ;
     glutCreateWindow( toLoad.c_str() ) ;
     
-    glutKeyboardFunc( keyboardFunc ) ;
     glutDisplayFunc( displayFunc ) ;
     glutReshapeFunc( reshapeFunc ) ;
-    
     // call reshapeFunc once to set up my projection matrix
     reshapeFunc( glutGet( GLUT_WINDOW_WIDTH ), glutGet( GLUT_WINDOW_HEIGHT ) ) ;
+    
+    glutKeyboardFunc( keyboardFunc ) ;
+    glutCreateMenu( menu ) ;
+    glutAddMenuEntry( "Flip 'f'", 'f' ) ;
+    glutAddMenuEntry( "Mirror 'm'", 'm' ) ;
+    glutAddMenuEntry( "Greyscale 'g'", 'g' ) ;
+    glutAddMenuEntry( "", 0 ) ;
+    glutAddMenuEntry( "Save image to \"output.png\" 's'", 's' ) ;
+    glutAddMenuEntry( "Capture screen to \"screen-capture.png\" 'c'", 'c' ) ;
+    glutAddMenuEntry( "", 0 ) ;
+    glutAddMenuEntry( "Quit 'q'", 'q' ) ;
+    glutAttachMenu( GLUT_LEFT_BUTTON ) ;
     
     glutMainLoop() ;
     
@@ -59,23 +71,23 @@ int main( int argc, char* argv[] )
 
 void keyboardFunc( unsigned char key, int x, int y )
 {
-    switch( key )
+    menu( key ) ;
+}
+
+void menu( int id )
+{
+    switch( id )
     {
-        case 'q':
-        case 'Q':
-            exit(0) ;
-            break ;
-        
-        case 'g':
-            gImg->greyscale() ;
-            break ;
-        
         case 'f':
             gImg->flip() ;
             break ;
         
         case 'm':
             gImg->mirror() ;
+            break ;
+        
+        case 'g':
+            gImg->greyscale() ;
             break ;
         
         case 's':
@@ -97,6 +109,11 @@ void keyboardFunc( unsigned char key, int x, int y )
             img.save( "screen-capture.png" ) ;
         }
         break ;
+        
+        case 'q':
+        case 'Q':
+            exit(0) ;
+            break ;
         
         default:
             break ;
