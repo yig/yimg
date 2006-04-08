@@ -1,0 +1,5 @@
+INCLUDEFLAGS	+= -I/sw/include
+
+LINKTIMEFLAGS += -lz.1.1.3 /sw/lib/libpng.a -bind_at_load
+
+FRAMEWORKS	= -framework OpenGL -framework GLUT -framework AppKit
