@@ -18,13 +18,13 @@ WARNINGFLAGS = -Wall -Wshadow -Woverloaded-virtual -Wno-sign-compare
 COMPILERFLAGS = $(WARNINGFLAGS)
 
 COMPILERFLAGS += -g
-COMPILERFLAGS += -O3
-COMPILERFLAGS += -DNDEBUG
+#COMPILERFLAGS += -O3
+#COMPILERFLAGS += -DNDEBUG
 
-COMPILERFLAGS += -fno-inline
-COMPILERFLAGS += -finline-functions
+#COMPILERFLAGS += -fno-inline
+#COMPILERFLAGS += -finline-functions
 COMPILERFLAGS += -fkeep-inline-functions
-COMPILERFLAGS += -Winline
+#COMPILERFLAGS += -Winline
 
 AR = /usr/bin/ar
 ARFLAGS = -rus
@@ -75,7 +75,6 @@ clean: tidy
 	rm -f $(TARGET)
 	rm -f $(LIBTARGET)
 	rm -f $(DEPENDFILE)
-	rm -f plot
 	touch $(DEPENDFILE)
 
 tidy:

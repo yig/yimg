@@ -1,18 +1,18 @@
 #ifndef __YImage_hpp__
 #define __YImage_hpp__
 
-// file loading/saving automatically picks up changes to this struct.
-// The possibilities are: ARGB, ABGR, RGBA, BGRA.
-struct YPixel {
-	unsigned char r ;
-	unsigned char g ;
-	unsigned char b ;
-	unsigned char a ;
-};
-
 class YImage
 {
 public:
+    // file loading/saving automatically picks up changes to this struct.
+    // The possibilities are: ARGB, ABGR, RGBA, BGRA.
+    struct YPixel {
+    	unsigned char r ;
+    	unsigned char g ;
+    	unsigned char b ;
+    	unsigned char a ;
+    };
+    
 	YImage() ;
 	YImage( const YImage& ) ;
 	virtual ~YImage() ;

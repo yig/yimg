@@ -58,18 +58,18 @@ YImage::~YImage()
 	m_width = m_height = 0 ;
 }
 
-YPixel*
+YImage::YPixel*
 YImage::data()
 {
 	return m_data ;
 }
-const YPixel*
+const YImage::YPixel*
 YImage::data()
 const
 {
 	return m_data ;
 }
-YPixel&
+YImage::YPixel&
 YImage::at( int i, int j )
 {
 	assert( i >= 0 && i < m_width ) ;
@@ -77,7 +77,7 @@ YImage::at( int i, int j )
 	
 	return m_data[ i + j * m_width ] ;
 }
-const YPixel&
+const YImage::YPixel&
 YImage::at( int i, int j )
 const
 {
