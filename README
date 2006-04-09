@@ -1,3 +1,7 @@
+Author: Yotam Gingold <yotam@slackworks.com>
+Feedback: Invited!
+License: Public Domain.
+
 YImage:
 	A simple pixel buffer class that can
 		- save and load itself as a PNG (preserving alpha channel)
