@@ -103,7 +103,9 @@ void menu( int id )
             
             YImage img ;
             img.resize( view[2], view[3] ) ;
+            glReadBuffer( GL_FRONT );
             glReadPixels( view[0], view[1], view[2], view[3], GL_RGBA, GL_UNSIGNED_BYTE, img.data() ) ;
+            glReadBuffer( GL_BACK );
             
             img.flip() ;
             img.save( "screen-capture.png" ) ;
