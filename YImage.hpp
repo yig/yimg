@@ -24,8 +24,8 @@ public:
 	// Returns true if the images are the same size and have the same data for r,g,b.
 	bool same_rgb( const YImage& rhs ) const ;
 	
-	// Saves a PNG image.  If 'asap' is true, sacrifices compression ratio for speed.
-	bool save( const char* fname, bool asap = false ) const ;
+	// Saves a PNG image.  If 'fast' is true, sacrifices compression ratio for speed.
+	bool save( const char* fname, bool fast = false ) const ;
 	bool load( const char* fname ) ;
 	
 	YPixel* data() ;

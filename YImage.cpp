@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cassert>
 #include <png.h>
+#include <cstdlib>
 
 // for: #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 // we use this to determine the pixel format on the fly
@@ -222,11 +223,17 @@ static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t lengt
 static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
 {
 	voidp read_io_ptr = png_get_io_ptr(png_ptr) ;
-	fread( (unsigned char*) data, length, 1, (FILE*) read_io_ptr ) ;
+	(void) fread( (unsigned char*) data, length, 1, (FILE*) read_io_ptr ) ;
 }
 
+// Some error strings
+#define ERROR_STRING_OPEN "Error opening %s\n"
+#define ERROR_STRING_WRITING "libpng encountered a problem writing %s\n"
+#define ERROR_STRING_INVALID_FILE "Invalid png file: %s\n"
+#define ERROR_STRING_LIBERR "libpng encountered a problem (not related to file)\n"
+#define ERROR_STRING_MAYBE_FILE "libpng encountered a problem (may be related to file: %s)\n"
 
-bool YImage::save( const char* fname, bool asap )
+bool YImage::save( const char* fname, bool fast )
 const
 {
 	FILE* fp = NULL ;
@@ -234,15 +241,11 @@ const
 	png_structp png_ptr = NULL ;
 	png_infop info_ptr = NULL ;
 	
-	// Some error strings
-	char open[] = "Error opening %s\n" ;
-	char problem[] = "libpng encountered a problem writing %s)\n" ;
-	
 	// Open the file for reading in binary mode.
 	fp = fopen( fname, "wb" ) ;
 	if( !fp )
 	{
-		fprintf( stderr, open, fname ) ;
+		fprintf( stderr, ERROR_STRING_OPEN, fname ) ;
 		rval = false ;
 		goto YImage_save_cleanup ;
 	}
@@ -251,14 +254,14 @@ const
 	png_ptr = png_create_write_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL ) ;
 	if( !png_ptr )
 	{
-		fprintf( stderr, problem, fname ) ;
+		fprintf( stderr, ERROR_STRING_WRITING, fname ) ;
 		rval = false ;
 		goto YImage_save_cleanup ;
 	}
 	info_ptr = png_create_info_struct( png_ptr ) ;
 	if( !info_ptr )
 	{
-		fprintf( stderr, problem, fname ) ;
+		fprintf( stderr, ERROR_STRING_WRITING, fname ) ;
 		rval = false ;
 		goto YImage_save_cleanup ;
     }
@@ -266,7 +269,7 @@ const
 	// Set up the png error routine.
 	if( setjmp(png_jmpbuf(png_ptr)) )
 	{
-		fprintf( stderr, problem, fname ) ;
+		fprintf( stderr, ERROR_STRING_WRITING, fname ) ;
 		rval = false ;
 		goto YImage_save_cleanup ;
     }
@@ -290,8 +293,8 @@ const
 		) ;
 	png_write_info( png_ptr, info_ptr ) ;
 	
-	// If we've been asked to write ASAP, speed up the compression
-	if( asap ) png_set_compression_level( png_ptr, Z_BEST_SPEED );
+	// If we've been asked to write quickly, speed up the compression.
+	if( fast ) png_set_compression_level( png_ptr, Z_BEST_SPEED );
 	
 	// Then we set up transforms.
 	/*
@@ -346,13 +349,7 @@ bool YImage::load(const char* fname)
 	bool rval = true;
 	png_structp png_ptr = NULL ;
 	png_infop info_ptr = NULL ;
-	
-	// Some error strings
-	char open[] = "Error opening %s\n" ;
-	char invalid[] = "Invalid png file: %s\n" ;
-	char liberr[] = "libpng encountered a problem (not related to file)\n" ;
-	char maybe[] = "libpng encountered a problem (may be related to file: %s)\n" ;
-	
+    
 	// for checking the png header
 	const size_t PNG_BYTES_TO_CHECK = 4 ; // example.c uses 4
 	png_byte header[ PNG_BYTES_TO_CHECK ] ;
@@ -361,7 +358,7 @@ bool YImage::load(const char* fname)
 	fp = fopen( fname, "rb" ) ;
 	if( !fp )
 	{
-		fprintf( stderr, open, fname ) ;
+		fprintf( stderr, ERROR_STRING_OPEN, fname ) ;
 		rval = false;
 		goto YImage_load_cleanup ;
 	}
@@ -369,13 +366,13 @@ bool YImage::load(const char* fname)
 	// Check some bytes at the beginning of the file to make sure it's a png.
 	if( PNG_BYTES_TO_CHECK != fread( header, 1, PNG_BYTES_TO_CHECK, fp ) )
 	{
-		fprintf( stderr, invalid, fname ) ;
+		fprintf( stderr, ERROR_STRING_INVALID_FILE, fname ) ;
 		rval = false;
 		goto YImage_load_cleanup ;
 	}
 	if( png_sig_cmp( header, 0, PNG_BYTES_TO_CHECK ) )
 	{
-		fprintf( stderr, invalid, fname ) ;
+		fprintf( stderr, ERROR_STRING_INVALID_FILE, fname ) ;
 		rval = false;
 		goto YImage_load_cleanup ;
 	}
@@ -384,14 +381,14 @@ bool YImage::load(const char* fname)
 	png_ptr = png_create_read_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL ) ;
 	if( !png_ptr )
 	{
-		fprintf( stderr, liberr ) ;
+		fprintf( stderr, ERROR_STRING_LIBERR ) ;
 		rval = false;
 		goto YImage_load_cleanup ;
 	}
 	info_ptr = png_create_info_struct( png_ptr ) ;
 	if( !info_ptr )
 	{
-		fprintf( stderr, liberr ) ;
+		fprintf( stderr, ERROR_STRING_LIBERR ) ;
 		rval = false;
 		goto YImage_load_cleanup ;
     }
@@ -399,7 +396,7 @@ bool YImage::load(const char* fname)
 	// Set up the png error routine.
 	if( setjmp(png_jmpbuf(png_ptr)) )
 	{
-		fprintf( stderr, maybe, fname ) ;
+		fprintf( stderr, ERROR_STRING_MAYBE_FILE, fname ) ;
 		rval = false;
 		goto YImage_load_cleanup ;
     }
