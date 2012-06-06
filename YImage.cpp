@@ -2,8 +2,10 @@
 
 #include <iostream>
 #include <cassert>
-#include <png.h>
 #include <cstdlib>
+
+#include <png.h>
+#include <zlib.h> // For Z_BEST_SPEED
 
 // for: #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 // we use this to determine the pixel format on the fly
@@ -208,21 +210,21 @@ bool YImage::same_rgb( const YImage& rhs ) const
 static void user_write_data(png_structp png_ptr, png_bytep data, png_size_t length);
 static void user_write_data(png_structp png_ptr, png_bytep data, png_size_t length)
 {
-	voidp write_io_ptr = png_get_io_ptr(png_ptr) ;
+	png_voidp write_io_ptr = png_get_io_ptr(png_ptr) ;
 	fwrite( (unsigned char*) data, length, 1, (FILE*) write_io_ptr ) ;
 }
 
 static void user_flush_data(png_structp png_ptr);
 static void user_flush_data(png_structp png_ptr)
 {
-	voidp write_io_ptr = png_get_io_ptr(png_ptr) ;
+	png_voidp write_io_ptr = png_get_io_ptr(png_ptr) ;
 	fflush( (FILE*) write_io_ptr ) ;
 }
 
 static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t length) ;
 static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
 {
-	voidp read_io_ptr = png_get_io_ptr(png_ptr) ;
+	png_voidp read_io_ptr = png_get_io_ptr(png_ptr) ;
 	(void) fread( (unsigned char*) data, length, 1, (FILE*) read_io_ptr ) ;
 }
 
