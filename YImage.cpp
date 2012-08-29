@@ -235,7 +235,7 @@ static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t lengt
 #define ERROR_STRING_LIBERR "libpng encountered a problem (not related to file)\n"
 #define ERROR_STRING_MAYBE_FILE "libpng encountered a problem (may be related to file: %s)\n"
 
-bool YImage::save( const char* fname, bool fast )
+bool YImage::save( const char* fname, const bool fast )
 const
 {
 	FILE* fp = NULL ;
