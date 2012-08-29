@@ -25,7 +25,7 @@ public:
 	bool same_rgb( const YImage& rhs ) const ;
 	
 	// Saves a PNG image.  If 'fast' is true, sacrifices compression ratio for speed.
-	bool save( const char* fname, bool fast = false ) const ;
+	bool save( const char* fname, const bool fast = false ) const ;
 	bool load( const char* fname ) ;
 	
 	YPixel* data() ;
