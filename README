@@ -1,13 +1,13 @@
 Author: Yotam Gingold <yotam (strudel) yotamgingold.com>
-License: Public Domain.  (I, Yotam Gingold, the author, release this code into the public domain.)
-Homepage: http://yotamgingold.com/code/
+License: Public Domain [CC0](http://creativecommons.org/publicdomain/zero/1.0/)
 GitHub: https://github.com/yig/yimg
 
 YImage:
     A simple pixel buffer class that can
-        - save and load itself as a PNG (preserving alpha channel)
+        - save and load itself as a PNG (preserving alpha channel) among other formats
         - set color-plane layout (compile-time)
         - resize/flip/mirror/greyscale
+    Simply include `YImage.hpp` in your program and compile `YImage.cpp` in it, too.
 
 showpng:
     An example GLUT application using YImage that takes a PNG file as
@@ -21,6 +21,8 @@ showpng:
         - s: save( "output.png" ).
         - c: captures current window backbuffer into "screen-capture.png"
         - q: quit
+    Compile either with the one-liner at the top of `showpng.cpp`: `c++ -o showpng showpng.cpp YImage.cpp -I/usr/local/include -L/usr/local/lib -lGL -lGLUT`
+    or use `cmake`: `mkdir build; cd build; cmake ..; make; ./showpng`
 
 transparent.html:
     A basic web page to test the transparency of a PNG named "output.png".
@@ -37,3 +39,8 @@ Version History:
         No longer generate warning about unused return value.
         Now includes <cstdio> for platforms that need it.
         Switched OS X libpng include/library paths from fink to macports.
+    - 2015-12-22:
+        Replaced libpng dependency with public domain stb_image* implementations (included).
+        Now many more formats can be loaded (PNG,JPEG,TGA,BMP,PSD,GIF,PIC,PNM) and saved (PNG,BPM,TGA).
+        Added a rescale() function.
+        Switched to cmake.

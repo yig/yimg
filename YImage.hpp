@@ -1,3 +1,9 @@
+/*
+Author: Yotam Gingold <yotam (strudel) yotamgingold.com>
+License: Public Domain [CC0](http://creativecommons.org/publicdomain/zero/1.0/)
+GitHub: https://github.com/yig/yimg
+*/
+
 #ifndef __YImage_hpp__
 #define __YImage_hpp__
 
@@ -13,9 +19,11 @@ public:
         unsigned char a ;
     };
     
+    // An empty constructor creates an empty image with data set to NULL
+    // and width and height set to 0.
     YImage() ;
 	YImage( const YImage& ) ;
-	virtual ~YImage() ;
+	~YImage() ;
 	
 	YImage& operator=( const YImage& ) ;
 	
@@ -28,6 +36,9 @@ public:
 	bool save( const char* fname, const bool fast = false ) const ;
 	bool load( const char* fname ) ;
 	
+	// Sets the width and height to 0 and data to NULL.
+	void clear();
+	
 	YPixel* data() ;
 	const YPixel* data() const ;
 	
@@ -36,7 +47,12 @@ public:
 	
 	int width() const ;
 	int height() const ;
+	// Resizes the image as in a window or canvas resize.
+	// Preserves as much as possible the old image (in the upper left).
+    // Newly visible pixels are set to transparent black.
 	void resize( int width, int height ) ;
+	// Resizes the image by scaling it to fit in the new dimensions.
+	void rescale( int width, int height ) ;
 	
 	// flip vertically
 	void flip() ;

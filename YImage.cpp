@@ -1,16 +1,110 @@
+/*
+Author: Yotam Gingold <yotam (strudel) yotamgingold.com>
+License: Public Domain [CC0](http://creativecommons.org/publicdomain/zero/1.0/)
+GitHub: https://github.com/yig/yimg
+*/
+
 #include "YImage.hpp"
 
-#include <iostream>
 #include <cassert>
-#include <cstdlib>
 #include <cstring>
 
-#include <png.h>
-#include <zlib.h> // For Z_BEST_SPEED
+#include <string>
+#include <algorithm> // tolower
+
+
+// For load()
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+// For save()
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
+// For rescale()
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize.h"
 
 // for: #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 // we use this to determine the pixel format on the fly
 #include <cstddef>
+
+namespace
+{
+    // stbir*() functions require input to be RGBA.
+    // If we have a different pixel layout, we can swizzle in-place.
+    
+    const bool kYPixelIsRGBA = (
+	    offsetof( YImage::YPixel, r ) == 0
+	    &&
+	    offsetof( YImage::YPixel, g ) == 1
+	    &&
+	    offsetof( YImage::YPixel, b ) == 2
+	    &&
+	    offsetof( YImage::YPixel, a ) == 3
+	    );
+	
+	// Given YPixel data, swizzles it in-place so that the unsigned char layout
+	// becomes RGBA. No-op if YPixel layout is already RGBA.
+	void SwizzleToRGBA( YImage::YPixel* data, int num_pixels )
+	{
+	    // data must be non-null.
+	    assert( data );
+	    assert( num_pixels > 0 );
+	    
+	    if( kYPixelIsRGBA ) return;
+	    
+	    YImage::YPixel pix_saved;
+	    unsigned char* pix_RGBA;
+	    for( int i = 0; i < num_pixels; ++i ) {
+	        pix_saved = data[i];
+	        pix_RGBA = reinterpret_cast< unsigned char* >( &data[i] );
+	        
+	        pix_RGBA[0] = pix_saved.r;
+	        pix_RGBA[1] = pix_saved.g;
+	        pix_RGBA[2] = pix_saved.b;
+	        pix_RGBA[3] = pix_saved.a;
+	    }
+	}
+	// Given RGBA data, swizzles it in-place so that it becomes YPixel layout.
+	// No-op if YPixel layout is already RGBA.
+	void SwizzleFromRGBA( YImage::YPixel* data, int num_pixels )
+	{
+	    // data must be non-null.
+	    assert( data );
+	    assert( num_pixels > 0 );
+	    
+	    if( kYPixelIsRGBA ) return;
+	    
+	    YImage::YPixel pix_saved;
+	    unsigned char* pix_RGBA;
+	    for( int i = 0; i < num_pixels; ++i ) {
+	        pix_saved = data[i];
+	        pix_RGBA = reinterpret_cast< unsigned char* >( &data[i] );
+	        
+	        pix_saved.r = pix_RGBA[0];
+	        pix_saved.g = pix_RGBA[1];
+	        pix_saved.b = pix_RGBA[2];
+	        pix_saved.a = pix_RGBA[3];
+	    }
+	}
+}
+
+namespace
+{
+/// From my: stl.h
+
+// Behaves like the python os.path.splitext() function.
+inline std::pair< std::string, std::string > os_path_splitext( const std::string& path )
+{
+    const std::string::size_type split_dot = path.find_last_of( "." );
+    const std::string::size_type split_slash = path.find_last_of( "/" );
+    if( split_dot != std::string::npos && (split_slash == std::string::npos || split_slash < split_dot) )
+        return std::make_pair( path.substr( 0, split_dot ), path.substr( split_dot ) );
+    else
+        return std::make_pair( path, std::string() );
+}
+}
 
 YImage::YImage()
 	: m_width( 0 ), m_height( 0 ), m_data( NULL )
@@ -32,21 +126,16 @@ YImage::operator=( const YImage& rhs )
         assert( 0 == rhs.m_width ) ;
         assert( 0 == rhs.m_height ) ;
         
-        if( m_data ) free( m_data ) ;
-        m_data = NULL ;
-        m_width = 0 ;
-        m_height = 0 ;
+        clear();
         
         return *this ;
     }
     
 	if( m_width != rhs.m_width || m_height != rhs.m_height )
 	{
-		if( m_data ) free( m_data ) ;
-		
 		m_width = rhs.m_width ;
 		m_height = rhs.m_height ;
-		m_data = (YPixel*) malloc( m_width * m_height * sizeof(YPixel) ) ;
+		m_data = (YPixel*) realloc( m_data, m_width * m_height * sizeof(YPixel) ) ;
 	}
 	
 	assert( m_data ) ;
@@ -57,9 +146,7 @@ YImage::operator=( const YImage& rhs )
 
 YImage::~YImage()
 {
-	if( m_data ) free( m_data ) ;
-	m_data = NULL ;
-	m_width = m_height = 0 ;
+	clear();
 }
 
 YImage::YPixel*
@@ -100,11 +187,32 @@ int YImage::height() const
 	return m_height ;
 }
 
-// Creates a new image with the specified size, preserving as
-// much as possible the old image (as in a window resize).
+void YImage::clear()
+{
+    if( m_data ) free( m_data );
+    
+    m_data = NULL;
+    m_width = m_height = 0;
+    return;
+}
+
 void YImage::resize( int widthh, int heightt )
 {
-	// do nothing
+    // New dimensions must be non-negative.
+    assert( widthh >= 0 && heightt >= 0 );
+    // New dimensions must be both 0 or both non-zero.
+    assert( widthh > 0 == heightt > 0 );
+    
+    // If they are both zero, clear the image and return.
+    if( 0 == widthh || 0 == heightt )
+    {
+        assert( widthh > 0 == heightt > 0 );
+        
+        clear();
+        return;
+    }
+    
+    // If they are the same, do nothing.
 	if( m_width == widthh && m_height == heightt )
 	{
 		assert( m_data ) ;
@@ -128,6 +236,70 @@ void YImage::resize( int widthh, int heightt )
 	m_width = widthh ;
 	m_height = heightt ;
 	m_data = new_data ;
+}
+
+
+void YImage::rescale( int widthh, int heightt )
+{
+    // New dimensions must be non-negative.
+    assert( widthh >= 0 && heightt >= 0 );
+    // New dimensions must be both 0 or both non-zero.
+    assert( widthh > 0 == heightt > 0 );
+    
+    // If they are both zero, clear the image and return.
+    if( 0 == widthh || 0 == heightt )
+    {
+        assert( widthh > 0 == heightt > 0 );
+        
+        clear();
+        return;
+    }
+    
+    // If they are the same, do nothing.
+	if( m_width == widthh && m_height == heightt )
+	{
+		assert( m_data ) ;
+		return ;
+	}
+	
+	YPixel* new_data = (YPixel*) malloc( widthh * heightt * sizeof(YPixel) ) ;
+	
+	// If there is currently no data, set the output to transparent black and return.
+	if( !m_data )
+	{
+	    assert( 0 == m_width && 0 == m_height );
+	    
+	    memset( new_data, 0, widthh * heightt * sizeof(YPixel) ) ;
+	    m_width = widthh ;
+        m_height = heightt ;
+        m_data = new_data ;
+        return;
+	}
+	
+	// If we are here, we have data.
+	assert( m_data );
+	assert( m_width > 0 && m_height > 0 );
+	
+	// stbir_resize_uint8() requires input to be RGBA.
+	// If we have a different order, swizzle.
+	SwizzleToRGBA( m_data, m_width*m_height );
+	
+	// Call stbir_resize_uint8()
+	const bool success = stbir_resize_uint8(
+	    reinterpret_cast< const unsigned char* >( m_data ), m_width, m_height, 0,
+	    reinterpret_cast< unsigned char* >( new_data ), widthh, heightt, 0,
+	    4 // number of channels
+	    );
+	assert( success );
+	
+	// Set the output.
+	free( m_data );
+	m_data = new_data;
+	m_width = widthh;
+	m_height = heightt;
+	
+	// Swizzle again if needed.
+	SwizzleFromRGBA( m_data, m_width*m_height );
 }
 
 
@@ -205,310 +377,69 @@ bool YImage::same_rgb( const YImage& rhs ) const
     return true;
 }
 
-
-// We use out own reading/writing functions because libpng may have been compiled using a
-// different compiler & libc.  That could make the FILE*'s incompatible.
-static void user_write_data(png_structp png_ptr, png_bytep data, png_size_t length);
-static void user_write_data(png_structp png_ptr, png_bytep data, png_size_t length)
-{
-	png_voidp write_io_ptr = png_get_io_ptr(png_ptr) ;
-	fwrite( (unsigned char*) data, length, 1, (FILE*) write_io_ptr ) ;
-}
-
-static void user_flush_data(png_structp png_ptr);
-static void user_flush_data(png_structp png_ptr)
-{
-	png_voidp write_io_ptr = png_get_io_ptr(png_ptr) ;
-	fflush( (FILE*) write_io_ptr ) ;
-}
-
-static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t length) ;
-static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
-{
-	png_voidp read_io_ptr = png_get_io_ptr(png_ptr) ;
-	(void) fread( (unsigned char*) data, length, 1, (FILE*) read_io_ptr ) ;
-}
-
-// Some error strings
-#define ERROR_STRING_OPEN "Error opening %s\n"
-#define ERROR_STRING_WRITING "libpng encountered a problem writing %s\n"
-#define ERROR_STRING_INVALID_FILE "Invalid png file: %s\n"
-#define ERROR_STRING_LIBERR "libpng encountered a problem (not related to file)\n"
-#define ERROR_STRING_MAYBE_FILE "libpng encountered a problem (may be related to file: %s)\n"
-
 bool YImage::save( const char* fname, const bool fast )
 const
 {
-	FILE* fp = NULL ;
-	bool rval = true ;
-	png_structp png_ptr = NULL ;
-	png_infop info_ptr = NULL ;
-	
-	// Open the file for reading in binary mode.
-	fp = fopen( fname, "wb" ) ;
-	if( !fp )
-	{
-		fprintf( stderr, ERROR_STRING_OPEN, fname ) ;
-		rval = false ;
-		goto YImage_save_cleanup ;
-	}
-	
-	// Allocate the png structs.
-	png_ptr = png_create_write_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL ) ;
-	if( !png_ptr )
-	{
-		fprintf( stderr, ERROR_STRING_WRITING, fname ) ;
-		rval = false ;
-		goto YImage_save_cleanup ;
-	}
-	info_ptr = png_create_info_struct( png_ptr ) ;
-	if( !info_ptr )
-	{
-		fprintf( stderr, ERROR_STRING_WRITING, fname ) ;
-		rval = false ;
-		goto YImage_save_cleanup ;
+    // NOTE: We switched from libpng to stb image writing.
+    //       This reduced dependencies and allows us to save many more formats,
+    //       but the `fast` parameter is ignored.
+    
+    
+    // Don't call this with an empty image.
+    assert( m_data );
+    assert( m_width > 0 && m_height > 0 );
+    
+    std::string extension = os_path_splitext( fname ).second;
+    std::transform( extension.begin(), extension.end(), extension.begin(), std::tolower );
+    
+    // These functions need swizzled data.
+    SwizzleToRGBA( m_data, m_width*m_height );
+    
+    bool success = false;
+    if( extension == ".png" ) {
+        success = stbi_write_png( fname, m_width, m_height, 4, m_data, 0 );
+    } else if( extension == ".bmp" ) {
+        success = stbi_write_bmp( fname, m_width, m_height, 4, m_data );
+    } else if( extension == ".tga" ) {
+        success = stbi_write_tga( fname, m_width, m_height, 4, m_data );
     }
-	
-	// Set up the png error routine.
-	if( setjmp(png_jmpbuf(png_ptr)) )
-	{
-		fprintf( stderr, ERROR_STRING_WRITING, fname ) ;
-		rval = false ;
-		goto YImage_save_cleanup ;
-    }
-	
-	// Give libpng the FILE*.
-	// png_init_io( png_ptr, fp ) ;
-	// or
-	// use our own write callback
-	png_set_write_fn( png_ptr, fp, (png_rw_ptr) user_write_data, user_flush_data ) ;
-	
-	// We'll use the low-level interface since the high-level interface won't handle
-	// png_set_filler() which we need to tell libpng to strip out the A from our
-	// 4-byte pixels.
-	
-	// First we set and write the info struct.
-	png_set_IHDR(
-		png_ptr, info_ptr,
-		m_width, m_height,
-		8, PNG_COLOR_TYPE_RGB_ALPHA,
-		PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT
-		) ;
-	png_write_info( png_ptr, info_ptr ) ;
-	
-	// If we've been asked to write quickly, speed up the compression.
-	if( fast ) png_set_compression_level( png_ptr, Z_BEST_SPEED );
-	
-	// Then we set up transforms.
-	/*
-	// 1. tell libpng to strip out the filler byte in our 4-byte pixels
-	// if YPixel::a comes after any other member (b,g,r), we strip AFTER
-	if( offsetof( YPixel, a ) > offsetof( YPixel, b ) ) {
-		png_set_filler( png_ptr, 0, PNG_FILLER_AFTER ) ;
-		// printf("alpha after\n");
-	} else {
-		png_set_filler( png_ptr, 0, PNG_FILLER_BEFORE ) ;
-		// printf("alpha before\n");
-	}
-	*/
-	if( offsetof( YPixel, a ) < offsetof( YPixel, b ) )
-		png_set_swap_alpha( png_ptr ) ;
-	// 2. tell libpng how our color triples are stored (b < r or vice versa)
-	if( offsetof( YPixel, b ) < offsetof( YPixel, r ) )
-	{
-		png_set_bgr( png_ptr ) ;
-		// printf("bgr\n") ;
-	}
-	// else { printf("rgb\n"); }
-	// printf( "offsetof r, b: %d %d\n", offsetof( YPixel, r ), offsetof( YPixel, b ) );
-	
-	// Finally we create a row_pointers[] pointing into our data* and write the png out to the FILE*.
-	{
-		// 1. allocate row pointers array
-		png_bytep* row_pointers = (png_bytep*) png_malloc( png_ptr, m_height * sizeof(png_bytep) ) ;
-		// 2. point row pointers into m_data
-		for( int i = 0 ; i < m_height ; ++i ) {
-			row_pointers[i] = (png_bytep) (m_data + i*m_width) ;
-		}
-		// 3. write the image data
-		png_write_image( png_ptr, row_pointers ) ;
-		// 4. free row pointers array
-		png_free( png_ptr, row_pointers ) ;
-	}
-	
-	// Write out end info.  We're done.  Fall through to cleanup.
-	png_write_end( png_ptr, NULL ) ;
-	
-YImage_save_cleanup:
-	png_destroy_write_struct( png_ptr ? &png_ptr : NULL, info_ptr ? &info_ptr : NULL ) ;
-	if( fp ) fclose( fp ) ;
-	
-	return rval ;
+    
+    // Unswizzle data.
+    SwizzleFromRGBA( m_data, m_width*m_height );
+    
+    return success;
 }
 
 bool YImage::load(const char* fname)
 {
-	FILE* fp = NULL ;
-	bool rval = true;
-	png_structp png_ptr = NULL ;
-	png_infop info_ptr = NULL ;
+    // NOTE: We switched from libpng to stb image writing.
+    //       This reduced dependencies and allows us to load many more formats,
+    //       but it doesn't support 16-bit-per-channel PNG's (which anyways we only
+    //       loaded by truncating the extra precision).
     
-	// for checking the png header
-	const size_t PNG_BYTES_TO_CHECK = 4 ; // example.c uses 4
-	png_byte header[ PNG_BYTES_TO_CHECK ] ;
-	
-	// Open the file for reading in binary mode.
-	fp = fopen( fname, "rb" ) ;
-	if( !fp )
-	{
-		fprintf( stderr, ERROR_STRING_OPEN, fname ) ;
-		rval = false;
-		goto YImage_load_cleanup ;
-	}
-	
-	// Check some bytes at the beginning of the file to make sure it's a png.
-	if( PNG_BYTES_TO_CHECK != fread( header, 1, PNG_BYTES_TO_CHECK, fp ) )
-	{
-		fprintf( stderr, ERROR_STRING_INVALID_FILE, fname ) ;
-		rval = false;
-		goto YImage_load_cleanup ;
-	}
-	if( png_sig_cmp( header, 0, PNG_BYTES_TO_CHECK ) )
-	{
-		fprintf( stderr, ERROR_STRING_INVALID_FILE, fname ) ;
-		rval = false;
-		goto YImage_load_cleanup ;
-	}
-	
-	// Since it looks like we have a good png file, allocate the png structs.
-	png_ptr = png_create_read_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL ) ;
-	if( !png_ptr )
-	{
-		fprintf( stderr, ERROR_STRING_LIBERR ) ;
-		rval = false;
-		goto YImage_load_cleanup ;
-	}
-	info_ptr = png_create_info_struct( png_ptr ) ;
-	if( !info_ptr )
-	{
-		fprintf( stderr, ERROR_STRING_LIBERR ) ;
-		rval = false;
-		goto YImage_load_cleanup ;
+    int widthh, heightt, num_raw_channels;
+    unsigned char *data = stbi_load( fname, &widthh, &heightt, &num_raw_channels, 4 );
+    // An error is indicated by stbi_load() returning NULL.
+    if( 0 == data ) {
+        stbi_image_free( data );
+        return false;
     }
-	
-	// Set up the png error routine.
-	if( setjmp(png_jmpbuf(png_ptr)) )
-	{
-		fprintf( stderr, ERROR_STRING_MAYBE_FILE, fname ) ;
-		rval = false;
-		goto YImage_load_cleanup ;
+    
+    // Reallocate memory as needed.
+    if( m_width != widthh || m_height != heightt ) {
+        m_width = widthh;
+        m_height = heightt;
+        m_data = (YPixel*) realloc( m_data, m_width * m_height * sizeof(YPixel) ) ;
     }
-	
-	// Give libpng the FILE*, tell it how many bytes we read.
-	// png_init_io( png_ptr, fp ) ;
-	// or
-	// use our own read callback
-	png_set_read_fn( png_ptr, fp, (png_rw_ptr) user_read_data ) ;
-	
-	png_set_sig_bytes( png_ptr, PNG_BYTES_TO_CHECK ) ;
-	
-	// We'll use the low-level interface since the high-level interface won't handle
-	// png_set_filler() which we need to guarantee there'll be a filler "A" in our
-	// 4-byte ARGB pixels.
-	// Really the low-level interface isn't more complicated than the high-level interface.
-	// To choose transform flags we have to query the png_info struct.
-	// Instead of OR'ing in another transform flag (high-level interface), we call a set
-	// method (low-level interface).
-	
-	// First we read the info struct.
-	png_read_info( png_ptr, info_ptr ) ;
-	
-	// Now we set up transforms.
-	// 1. convert gray and paletted to rgb (this guarantees 8 or 16 bit depths (rgb must be 8 or 16)).
-	//    also expand the alpha color to an alpha channel and convert 16 bit depths to 8.
-	// 2. if we don't have alpha, add an opaque channel.  also swap RGB and BGR depending on YPixel.
-	// 3. ask libpng to deinterlace
-	{
-		
-		png_byte color_type = png_get_color_type( png_ptr, info_ptr ) ;
-		png_byte depth = png_get_bit_depth( png_ptr, info_ptr ) ;
-		
-		// 1
-		if( color_type == PNG_COLOR_TYPE_PALETTE )
-			png_set_expand( png_ptr ) ;
-		if( color_type == PNG_COLOR_TYPE_GRAY && depth < 8 )
-			png_set_expand( png_ptr ) ;
-		if( png_get_valid( png_ptr, info_ptr, PNG_INFO_tRNS ) )
-			png_set_expand( png_ptr ) ;
-		if( depth == 16 )
-			png_set_strip_16( png_ptr ) ;
-		if( color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA )
-			png_set_gray_to_rgb( png_ptr ) ;
-		
-		
-		// NOTE: This next step affects the layout of the channels in the pixel.
-		//       We turn the pixel into the format in YPixel,
-		//       with the restrication that alpha comes at the beginning or end
-		//       and green is sandwiched between red and blue.
-		//       The possibilities are: ARGB, ABGR, RGBA, BGRA.
-		
-		// 2
-		if( color_type != PNG_COLOR_TYPE_GRAY_ALPHA && color_type != PNG_COLOR_TYPE_RGB_ALPHA && !png_get_valid( png_ptr, info_ptr, PNG_INFO_tRNS ) )
-			png_set_filler( png_ptr, 0xFF, offsetof( YPixel, a ) < offsetof( YPixel, b ) ? PNG_FILLER_BEFORE : PNG_FILLER_AFTER ) ;
-		else if( offsetof( YPixel, a ) < offsetof( YPixel, b ) )
-				png_set_swap_alpha( png_ptr ) ;
-		
-		if( offsetof( YPixel, b ) < offsetof( YPixel, r ) )
-			png_set_bgr( png_ptr ) ;
-		
-		// 3
-		png_set_interlace_handling( png_ptr ) ;
-		
-	}
-	
-	// We're almost ready to copy over the png data.
-	// First we must resize our data* and set our width & height.
-	{
-		png_uint_32 widthh = png_get_image_width( png_ptr, info_ptr ) ;
-		png_uint_32 heightt = png_get_image_height( png_ptr, info_ptr ) ;
-		
-		// fprintf( stderr, "width: %d, height: %d\n", (int) widthh, (int) heightt ) ;
-		
-		resize( widthh, heightt ) ;
-	}
-	
-	// Now we can create a rows[] pointing into our data* and read the png into our buffer.
-	{
-		// fprintf( stderr, "width: %d, height: %d\n", (int) m_width, (int) m_height ) ;
-		/*
-		
-		png_byte channels = png_get_channels( png_ptr, info_ptr ) ;
-		assert( 4 == channels ) ;
-		png_byte depth = png_get_bit_depth( png_ptr, info_ptr ) ;
-		assert( 8 == depth ) ;
-		png_uint_32 rowbytes = png_get_rowbytes( png_ptr, info_ptr ) ;
-		assert( sizeof(YPixel) * m_width == rowbytes ) ;
-		*/
-		
-		// 1. allocate row pointers array
-		png_bytep* row_pointers = (png_bytep*) png_malloc( png_ptr, m_height * sizeof(png_bytep) ) ;
-		// 2. point row pointers into m_data
-		for( int i = 0 ; i < m_height ; ++i )
-			row_pointers[i] = (png_bytep) (m_data + i*m_width ) ;
-		// 3. read the image data
-		png_read_image( png_ptr, row_pointers ) ;
-		// 4. free row pointers array
-		png_free( png_ptr, row_pointers ) ;
-	}
-	
-	// Read the end info.  We're done.  Fall through to cleanup.
-	png_read_end( png_ptr, NULL ) ;
-	
-YImage_load_cleanup:
-	// due to (what looks like) a bug in libpng-1.2.4, we can't pass NULL for the png_ptr arg
-	if( png_ptr ) png_destroy_read_struct( &png_ptr, info_ptr ? &info_ptr : NULL, NULL ) ;
-	
-	if( fp ) fclose( fp ) ;
-	
-	return rval ;
+    assert( m_data );
+    
+    // Copy the loaded data.
+    memcpy( m_data, data, m_width * m_height * sizeof(YPixel) ) ;
+    
+    stbi_image_free( data );
+    
+    // Unswizzle data.
+    SwizzleFromRGBA( m_data, m_width*m_height );
+    
+    return true;
 }

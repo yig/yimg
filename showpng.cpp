@@ -1,4 +1,10 @@
-#include <GL/glut.h>
+// c++ -o showpng showpng.cpp YImage.cpp -I/usr/local/include -L/usr/local/lib -lGL -lGLUT
+
+#ifdef __APPLE__
+    #include <GLUT/glut.h>
+#else
+    #include <GL/glut.h>
+#endif
 #include "YImage.hpp"
 
 #include <iostream>
