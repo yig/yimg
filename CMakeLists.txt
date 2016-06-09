@@ -26,5 +26,5 @@ target_link_libraries(showpng
 ADD_CUSTOM_COMMAND(
     TARGET showpng
     POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/sakura.png" "${CMAKE_BINARY_DIR}/sakura.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/sakura.png" "${CMAKE_BINARY_DIR}/sakura.png"
     )
